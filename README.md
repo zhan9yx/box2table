@@ -21,7 +21,24 @@ table2docs 某张表.txt
 pbpaste | table2docs
 ```
 
+管道里没有内容时，读剪贴板。
+
 跑完会打印几行几列。剪贴板里的纯文本还是原来的方框表，所以这条命令可以再跑一次。想把框线原样贴进去，用 ⌘⇧V。
+
+在 Claude Code、Grok、Codex、Pi、OpenCode、Gemini CLI、Qwen、Cursor、GitHub Copilot CLI、Factory Droid 里可以自己装一条 `/table`。先复制要的那一张，再输入 `/table`。有多张表就各复制一次。
+
+```bash
+table2docs install
+table2docs install claude grok codex pi opencode gemini qwen cursor copilot droid
+```
+
+`table2docs install` 后面不写名字，就只列出可以装哪些，不改配置。仓库本身也不会改你的配置。
+
+想勾选再装，运行 `table2docs bootstrap`。它先看本机有没有这些命令或应用，已安装的默认勾上。↑↓ 移动，空格勾选，回车安装，q 取消。已经开着的窗口要新开一次才认。不看菜单时仍然用 `table2docs install 名字`。不带参数的 `table2docs` 仍然是转换剪贴板或文件里的表。
+
+Pi 是在本地直接跑。Droid 也在本地跑，不过那段脚本文字会进对话。其余是让那个工具去执行 `table2docs`。Gemini 和 Qwen 执行前会先问。只装了 claude 时，Grok 也能看见这条命令。不要再往 `~/.agents/skills`、`~/.claude/skills`、`~/.cursor/skills` 放同名的一份，Grok 也会扫到。
+
+已经开着的窗口要新开一次才认。Pi 自己输入 `/reload`。Copilot 用 `/skills reload`。Droid 在 `/commands` 里按 R。
 
 只看生成的 HTML、不改剪贴板：
 

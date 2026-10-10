@@ -1,9 +1,11 @@
 import html
+import io
 import json
 import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -128,6 +130,42 @@ class ParseTests(unittest.TestCase):
 
     def test_missing_table(self):
         self.assertEqual(table2docs.parse_tables("只有一段话"), [])
+
+
+class ReadInputTests(unittest.TestCase):
+    def test_empty_nontty_reads_clipboard_without_pbpaste(self):
+        stdin = io.StringIO("")
+        with (
+            mock.patch.object(table2docs.sys, "stdin", stdin),
+            mock.patch.object(table2docs, "read_clipboard", return_value="CLIP") as clip,
+            mock.patch.object(table2docs.subprocess, "run") as run,
+        ):
+            self.assertEqual(table2docs.read_input(None), "CLIP")
+        clip.assert_called_once_with()
+        run.assert_not_called()
+
+    def test_nonempty_pipe_does_not_read_clipboard(self):
+        text = "┌──┐\n│a │\n└──┘\n"
+        stdin = io.StringIO(text)
+        with (
+            mock.patch.object(table2docs.sys, "stdin", stdin),
+            mock.patch.object(table2docs, "read_clipboard") as clip,
+            mock.patch.object(table2docs.subprocess, "run") as run,
+        ):
+            self.assertEqual(table2docs.read_input(None), text)
+        clip.assert_not_called()
+        run.assert_not_called()
+
+    def test_dash_empty_stdin_returns_empty(self):
+        stdin = io.StringIO("")
+        with (
+            mock.patch.object(table2docs.sys, "stdin", stdin),
+            mock.patch.object(table2docs, "read_clipboard") as clip,
+            mock.patch.object(table2docs.subprocess, "run") as run,
+        ):
+            self.assertEqual(table2docs.read_input("-"), "")
+        clip.assert_not_called()
+        run.assert_not_called()
 
 
 def _paste(prefer: str | None = None) -> str:
