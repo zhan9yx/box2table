@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -533,23 +535,9 @@ description = "把剪贴板里刚复制的那一张表转成可粘贴的表格"
 prompt = """
 <!-- box2table-managed-command -->
 
-剪贴板里是刚复制的那一张表。下面命令的输出就是结果。把那一行原样回复，不要重画表格。
-
-!{box2table}
+剪贴板里是刚复制的那一张表。只运行 box2table，不要加参数。把命令打印的那一行原样回复，不要重画表格。
 """
 '''
-
-_QWEN_MD = """\
----
-description: 把剪贴板里刚复制的那一张表转成可粘贴的表格
----
-
-<!-- box2table-managed-command -->
-
-剪贴板里是刚复制的那一张表。下面命令的输出就是结果。把那一行原样回复，不要重画表格。
-
-!{box2table}
-"""
 
 _COPILOT_SKILL = """\
 ---
@@ -565,7 +553,7 @@ description: 只在用户输入 /table 时使用。剪贴板里是刚复制的�
 _DROID_SH = """\
 #!/bin/sh
 # box2table-managed-command
-# 剪贴板里是刚复制的那一张表。把下面命令打印的那一行原样回复，不要重画表格。
+# 剪贴板里是刚复制的那一张表。
 exec box2table
 """
 
@@ -635,7 +623,7 @@ def _tool_path(home: Path, name: str) -> Path:
 
 
 def _tool_body(name: str) -> str:
-    if name in ("claude", "grok", "cursor"):
+    if name in ("claude", "grok", "cursor", "qwen"):
         return _COMMAND_MD
     if name == "codex":
         return _SKILL_MD
@@ -645,8 +633,6 @@ def _tool_body(name: str) -> str:
         return _OPENCODE_MD
     if name == "gemini":
         return _GEMINI_TOML
-    if name == "qwen":
-        return _QWEN_MD
     if name == "copilot":
         return _COPILOT_SKILL
     if name == "droid":
@@ -683,64 +669,360 @@ def _reject_unknown(names: list[str]) -> bool:
     return True
 
 
+# 这些工具没有“跑完就结束、不请求模型”的命令文件。钩子在模型看到这句话之前拦住。
+# OpenCode 的自定义命令一定发给模型。Copilot 的命令钩子改不了这一轮。这两处不装钩子。
+_HOOK_SCRIPTS = {
+    "claude": ".claude/hooks/box2table-table.py",
+    "grok": ".grok/hooks/box2table-table.py",
+    "codex": ".codex/hooks/box2table-table.py",
+    "cursor": ".cursor/hooks/box2table-table.py",
+    "gemini": ".gemini/hooks/box2table-table.py",
+    "qwen": ".qwen/hooks/box2table-table.py",
+}
+_HOOK_DIALECT = {
+    "claude": "scoped",
+    "qwen": "scoped",
+    "grok": "filter",
+    "codex": "filter",
+    "cursor": "cursor",
+    "gemini": "gemini",
+}
+_HOOK_CONFIGS = {
+    "claude": ".claude/settings.json",
+    "grok": ".grok/hooks/box2table.json",
+    "codex": ".codex/hooks.json",
+    "cursor": ".cursor/hooks.json",
+    "gemini": ".gemini/settings.json",
+    "qwen": ".qwen/settings.json",
+}
+_HOOK_PY = '''#!/usr/bin/env python3
+"""box2table-managed-command: run /table locally and do not send it to the model."""
+
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+_MARKER = "box2table-managed-command"
+_BODY = "剪贴板里是刚复制的那一张表。只运行 box2table，不要加参数。把命令打印的那一行原样回复，不要重画表格。"
+
+
+def _command():
+    found = shutil.which("box2table")
+    if found:
+        return found
+    fallback = Path.home() / ".local/bin/box2table"
+    if fallback.exists():
+        return str(fallback)
+    return ""
+
+
+def _prompt_text(payload):
+    for key in ("prompt", "user_message", "userMessage"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
+
+
+def _is_table(payload):
+    for key in ("command_name", "commandName"):
+        if payload.get(key) == "table":
+            return True
+    text = _prompt_text(payload).strip()
+    if text == "/table" or text.startswith("/table ") or text.startswith("/table\\n"):
+        return True
+    compact = " ".join(text.split())
+    body = " ".join(_BODY.split())
+    if len(text) <= 1200 and (compact == body or body in compact or (_MARKER in text and "box2table" in text)):
+        return True
+    return False
+
+
+def _line():
+    command = _command()
+    if not command:
+        return "找不到 box2table。"
+    result = subprocess.run([command], capture_output=True, text=True)
+    text = (result.stdout or result.stderr or "").strip()
+    return text.splitlines()[-1] if text else "转换失败"
+
+
+def _emit(dialect, message, matched):
+    if dialect == "cursor":
+        if matched:
+            print(json.dumps({"continue": False, "user_message": message}, ensure_ascii=False))
+        else:
+            print(json.dumps({"continue": True}))
+        return
+    if not matched:
+        return
+    if dialect == "gemini":
+        print(json.dumps({"decision": "deny", "reason": message}, ensure_ascii=False))
+        return
+    print(json.dumps({"decision": "block", "reason": message}, ensure_ascii=False))
+
+
+def main():
+    dialect = sys.argv[1] if len(sys.argv) > 1 else "filter"
+    raw = sys.stdin.read()
+    try:
+        payload = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        payload = None
+    if not isinstance(payload, dict):
+        matched = dialect == "scoped"
+    else:
+        matched = _is_table(payload)
+    if not matched:
+        _emit(dialect, "", False)
+        return 0
+    _emit(dialect, _line(), True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
+
+def _hook_script(home: Path, name: str) -> Path:
+    return home / _HOOK_SCRIPTS[name]
+
+
+def _hook_config(home: Path, name: str) -> Path:
+    return home / _HOOK_CONFIGS[name]
+
+
+def _hook_command(home: Path, name: str) -> str:
+    return f"{shlex.quote(str(_hook_script(home, name)))} {_HOOK_DIALECT[name]}"
+
+
+def _is_our_hook_command(command: object) -> bool:
+    return isinstance(command, str) and "box2table-table.py" in command
+
+
+def _load_json_object(path: Path) -> dict | None:
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        print(f"{path} 读不了，没有改：{exc}", file=sys.stderr)
+        return None
+    if not isinstance(data, dict):
+        print(f"{path} 不是 JSON 对象，没有改。", file=sys.stderr)
+        return None
+    return data
+
+
+def _write_json(path: Path, data: dict) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"{path} 没有写成：{exc}", file=sys.stderr)
+        return False
+    return True
+
+
+def _ensure_grouped_hook(data: dict, event: str, command: str, matcher: str | None, timeout: int) -> bool:
+    hooks = data.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        return False
+    groups = hooks.setdefault(event, [])
+    if not isinstance(groups, list):
+        return False
+    handler = {"type": "command", "command": command, "timeout": timeout}
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
+            continue
+        for item in group["hooks"]:
+            if isinstance(item, dict) and _is_our_hook_command(item.get("command")):
+                item.clear()
+                item.update(handler)
+                return True
+    group: dict = {"hooks": [handler]}
+    if matcher is not None:
+        group = {"matcher": matcher, "hooks": [handler]}
+    groups.append(group)
+    return True
+
+
+def _ensure_cursor_hook(data: dict, command: str) -> bool:
+    if "version" not in data:
+        data["version"] = 1
+    hooks = data.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        return False
+    items = hooks.setdefault("beforeSubmitPrompt", [])
+    if not isinstance(items, list):
+        return False
+    for item in items:
+        if isinstance(item, dict) and _is_our_hook_command(item.get("command")):
+            item["command"] = command
+            return True
+    items.append({"command": command})
+    return True
+
+
+def _install_hook_config(home: Path, name: str) -> bool:
+    path = _hook_config(home, name)
+    data = _load_json_object(path)
+    if data is None:
+        return False
+    command = _hook_command(home, name)
+    if name == "cursor":
+        ok = _ensure_cursor_hook(data, command)
+    elif name == "gemini":
+        ok = _ensure_grouped_hook(data, "BeforeAgent", command, None, 15000)
+    elif name in ("grok", "codex"):
+        ok = _ensure_grouped_hook(data, "UserPromptSubmit", command, None, 15)
+    else:
+        ok = _ensure_grouped_hook(data, "UserPromptExpansion", command, "table", 15)
+    if not ok:
+        print(f"{path} 里的 hooks 不是预期的结构，没有改。", file=sys.stderr)
+        return False
+    return _write_json(path, data)
+
+
+def _write_managed(path: Path, text: str, executable: bool) -> str | None:
+    """Return 'updated', 'wrote', or None on failure. Refuse an unmarked existing file."""
+    updated = False
+    if path.exists():
+        try:
+            current = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            print(f"{path} 读不了，没有覆盖：{exc}", file=sys.stderr)
+            return None
+        if MANAGED_MARKER not in current:
+            print(f"{path} 没有 {MANAGED_MARKER} 标记，没有覆盖。", file=sys.stderr)
+            return None
+        updated = True
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        if executable:
+            path.chmod(0o755)
+    except OSError as exc:
+        print(f"{path} 没有写成：{exc}", file=sys.stderr)
+        return None
+    print(f"{'已更新' if updated else '已写入'} {path}")
+    return "updated" if updated else "wrote"
+
+
 def _install_tools(home: Path, names: list[str]) -> int:
     failed = False
     wrote = False
     for name in names:
         path = _tool_path(home, name)
-        updated = False
-        if path.exists():
-            try:
-                current = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeError) as exc:
-                print(f"{path} 读不了，没有覆盖：{exc}", file=sys.stderr)
-                failed = True
-                continue
-            if MANAGED_MARKER not in current:
-                print(f"{path} 没有 {MANAGED_MARKER} 标记，没有覆盖。", file=sys.stderr)
-                failed = True
-                continue
-            updated = True
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(_tool_body(name), encoding="utf-8")
-            if name == "droid":
-                path.chmod(0o755)
-        except OSError as exc:
-            print(f"{path} 没有写成：{exc}", file=sys.stderr)
+        if _write_managed(path, _tool_body(name), name == "droid") is None:
             failed = True
             continue
-        print(f"{'已更新' if updated else '已写入'} {path}")
         wrote = True
+        if name not in _HOOK_SCRIPTS:
+            continue
+        if _write_managed(_hook_script(home, name), _HOOK_PY, True) is None:
+            failed = True
+            continue
+        if not _install_hook_config(home, name):
+            failed = True
     if wrote:
         print(_OPEN_NOTE)
     return 1 if failed else 0
+
+
+def _drop_hook_entries(items: list) -> tuple[list, bool]:
+    kept: list = []
+    removed = False
+    for item in items:
+        if isinstance(item, dict) and _is_our_hook_command(item.get("command")):
+            removed = True
+            continue
+        if isinstance(item, dict) and isinstance(item.get("hooks"), list):
+            inner = []
+            for handler in item["hooks"]:
+                if isinstance(handler, dict) and _is_our_hook_command(handler.get("command")):
+                    removed = True
+                    continue
+                inner.append(handler)
+            if inner:
+                item["hooks"] = inner
+                kept.append(item)
+            else:
+                removed = True
+            continue
+        kept.append(item)
+    return kept, removed
+
+
+def _uninstall_hook_config(home: Path, name: str) -> bool:
+    path = _hook_config(home, name)
+    if not path.exists():
+        return True
+    data = _load_json_object(path)
+    if data is None:
+        return False
+    hooks = data.get("hooks")
+    if isinstance(hooks, dict):
+        for event in list(hooks):
+            groups = hooks.get(event)
+            if not isinstance(groups, list):
+                continue
+            kept, _removed = _drop_hook_entries(groups)
+            if kept:
+                hooks[event] = kept
+            else:
+                del hooks[event]
+        if not hooks:
+            data.pop("hooks", None)
+    if data in ({}, {"version": 1}):
+        try:
+            path.unlink()
+        except OSError as exc:
+            print(f"{path} 没有删掉：{exc}", file=sys.stderr)
+            return False
+        print(f"已删除 {path}")
+        return True
+    return _write_json(path, data)
+
+
+def _remove_marked(path: Path, missing_note: str | None) -> bool:
+    """Delete a marked file. Return False on failure. Missing is success."""
+    if not path.exists():
+        if missing_note:
+            print(missing_note)
+        return True
+    try:
+        current = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        print(f"{path} 读不了，没有删除：{exc}", file=sys.stderr)
+        return False
+    if MANAGED_MARKER not in current:
+        print(f"{path} 没有 {MANAGED_MARKER} 标记，没有删除。", file=sys.stderr)
+        return False
+    try:
+        path.unlink()
+    except OSError as exc:
+        print(f"{path} 没有删掉：{exc}", file=sys.stderr)
+        return False
+    print(f"已删除 {path}")
+    return True
 
 
 def _uninstall_tools(home: Path, names: list[str]) -> int:
     failed = False
     for name in names:
         path = _tool_path(home, name)
-        if not path.exists():
-            print(f"没有安装 {name}：{path}")
-            continue
-        try:
-            current = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError) as exc:
-            print(f"{path} 读不了，没有删除：{exc}", file=sys.stderr)
+        if not _remove_marked(path, f"没有安装 {name}：{path}"):
             failed = True
+        if name not in _HOOK_SCRIPTS:
             continue
-        if MANAGED_MARKER not in current:
-            print(f"{path} 没有 {MANAGED_MARKER} 标记，没有删除。", file=sys.stderr)
+        if not _remove_marked(_hook_script(home, name), None):
             failed = True
-            continue
-        try:
-            path.unlink()
-        except OSError as exc:
-            print(f"{path} 没有删掉：{exc}", file=sys.stderr)
+        if not _uninstall_hook_config(home, name):
             failed = True
-            continue
-        print(f"已删除 {path}")
     return 1 if failed else 0
 
 
@@ -767,8 +1049,8 @@ _STATUS_MISSING = "没检测到"
 _BOOTSTRAP_NOTES = (
     _OPEN_NOTE,
     "只装了 claude 时，Grok 也能看到这条命令。",
-    "Gemini 和 Qwen 执行前会先问。",
-    "Pi 在本地直接跑。Droid 也在本地跑，脚本文字会进对话。",
+    "Claude、Grok、Codex、Pi、Cursor、Gemini、Qwen、Droid 都在本机跑，不调用模型。",
+    "OpenCode 跑完命令后仍会让模型看输出。Copilot 这条命令仍会调用模型。",
     "↑↓ 移动，空格勾选，回车安装，q 取消。",
 )
 

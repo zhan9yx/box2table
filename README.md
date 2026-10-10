@@ -96,6 +96,7 @@ box2table uninstall claude
 > **注意**：
 > * 已经开着的终端窗口需重新打开或 reload 才能生效（如 Pi 输入 `/reload`，Copilot 用 `/skills reload`，Droid 在 `/commands` 里按 R）。
 > * 只安装了 `claude` 时，`grok` 也能识别并使用该命令。
+> * `/table` 在 Claude Code、Grok、Codex、Pi、Cursor、Gemini、Qwen、Droid 里由本机直接运行，不把这句话交给模型。OpenCode 跑完命令后仍会让模型看输出。Copilot 这条命令仍会调用模型。
 
 ---
 
