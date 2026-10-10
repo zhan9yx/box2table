@@ -1,39 +1,35 @@
-# table2docs
+# box2table
 
 > 解决终端方框表（Unicode / Markdown / ASCII）直接 ⌘V 贴进 Google Docs 变乱码、断行错乱的 macOS 小工具。
 
 在终端或 AI CLI 工具里复制了一张表，直接 ⌘V 粘贴到 Google Docs / Word，得到的依然是 `┌─┬─┐` 字符画，而且由于终端窗口太窄折出来的换行全被硬编码了，格式惨不忍睹。
 
-**table2docs** 的作用就是：你把终端里的表复制好，在终端敲一下 `table2docs`，再去 Google Docs 按 ⌘V，粘贴出来的就是**文档原生的漂亮表格**，中文连贯、英文空格保留、硬折行自动拼回。
+**box2table** 的作用就是：你把终端里的表复制好，在终端敲一下 `box2table`，再去 Google Docs 按 ⌘V，粘贴出来的就是**文档原生的漂亮表格**，中文连贯、英文空格保留、硬折行自动拼回。
 
 ---
 
 ## 🎯 痛点展示
 
-**直接粘贴（⌘V）：**
-终端里的表因为窗口窄变成了这样：
+左图是终端里的方框表，右图是 `box2table` 生成的表格。Google Docs 粘贴时读的就是右图这种 HTML。
 
-![终端里的方框表](docs/images/before.png)
+<p>
+  <img src="docs/images/before.png" alt="终端里的方框表" width="46%">
+  <img src="docs/images/after.png" alt="处理后的表格" width="46%">
+</p>
+
+窗口太窄时，一格会被折成这样：
 
 ```text
 │周末菜单可调整  │4             │比如家里人说不吃辣，或者另一顿的            │
 │                │              │leftover，算进了这桌。不改菜单              │
 ```
 
-直接贴进 Google Docs，断行还在，窗口一变断行位置全错，甚至保留了字符画边框。
-
-**用 table2docs 处理后（⌘V）：**
-
-![处理后的表格](docs/images/after.png)
-
-这是工具生成的表格。Google Docs 粘贴时读的就是这种 HTML。
-
-![从方框表到表格](docs/images/demo.gif)
-
-在 Google Docs 里自动渲染成原生 table，并且文本自动清理：
+直接 ⌘V，断行还在，边框也还是字符画。处理后这一格是：
 
 > 「比如家里人说不吃辣，或者另一顿的 leftover，算进了这桌。不改菜单」
 > *(中文与中文紧密接上，中英文之间保留正常空格，去除对齐用的多余空格和垂直居中空行)*
+
+<img src="docs/images/demo.gif" alt="从方框表到表格" width="46%">
 
 ---
 
@@ -42,16 +38,16 @@
 适用于 macOS。使用系统自带 Python 3，**无需安装任何依赖，无需登录 Google**。
 
 ```bash
-git clone git@github.com:zhan9yx/table2docs.git
-cd table2docs
+git clone git@github.com:zhan9yx/box2table.git
+cd box2table
 pip install .
 ```
 
 *(脚本会装进当前 Python 的可执行目录，这个目录要在 `PATH` 里。不想用 pip 时：)*
 
 ```bash
-chmod +x src/table2docs/cli.py
-ln -sf "$(pwd)/src/table2docs/cli.py" ~/.local/bin/table2docs
+chmod +x src/box2table/cli.py
+ln -sf "$(pwd)/src/box2table/cli.py" ~/.local/bin/box2table
 ```
 
 ### 基本用法
@@ -59,7 +55,7 @@ ln -sf "$(pwd)/src/table2docs/cli.py" ~/.local/bin/table2docs
 1. 在终端或聊天窗口复制整张表格
 2. 终端运行：
 ```bash
-table2docs
+box2table
 ```
 3. 打开 Google Docs，直接 **⌘V** 粘贴即可！
 
@@ -67,14 +63,14 @@ table2docs
 
 ## 🔄 常用工作流与命令
 
-`table2docs` 极其灵活，支持剪贴板、文件流以及管道输入：
+`box2table` 极其灵活，支持剪贴板、文件流以及管道输入：
 
 | 命令 | 说明 |
 | --- | --- |
-| `table2docs` | 默认读剪贴板，清洗后写回可直接粘贴的表格格式 |
-| `table2docs examples/menu.txt` | 从指定文件读取表格 |
-| `pbpaste \| table2docs` | 从管道读取 |
-| `table2docs --stdout examples/menu.txt` | 仅输出 HTML 到终端，不修改剪贴板 |
+| `box2table` | 默认读剪贴板，清洗后写回可直接粘贴的表格格式 |
+| `box2table examples/menu.txt` | 从指定文件读取表格 |
+| `pbpaste \| box2table` | 从管道读取 |
+| `box2table --stdout examples/menu.txt` | 仅输出 HTML 到终端，不修改剪贴板 |
 
 > 💡 **小技巧**：处理完后，剪贴板同时写入了 HTML/RTF 和原始文本。按 **⌘V** 贴出富文本表格；如果还想贴回原始框线表，按 **⌘⇧V** (粘贴纯文本) 即可。
 
@@ -88,13 +84,13 @@ table2docs
 
 ```bash
 # 交互式选择安装（使用 ↑↓ 移动，空格勾选，回车确认）
-table2docs bootstrap
+box2table bootstrap
 
 # 或指定工具一键安装 /table 命令
-table2docs install claude grok
+box2table install claude grok
 
 # 卸载 /table 命令
-table2docs uninstall claude
+box2table uninstall claude
 ```
 
 > **注意**：
@@ -122,7 +118,7 @@ table2docs uninstall claude
 ## 项目结构
 
 ```text
-src/table2docs/     命令
+src/box2table/     命令
 examples/menu.txt   示例方框表
 docs/images/        截图
 ```

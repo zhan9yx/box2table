@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "table2docs"
+name = "box2table"
 version = "0.1.0"
 description = "解决终端方框表直接贴进 Google Docs 变乱码、断行错乱。macOS。"
 readme = "README.md"
@@ -14,10 +14,10 @@ authors = [{ name = "yixuan.zhang" }]
 keywords = ["clipboard", "google-docs", "macos", "markdown"]
 
 [project.urls]
-Homepage = "https://github.com/zhan9yx/table2docs"
+Homepage = "https://github.com/zhan9yx/box2table"
 
 [project.scripts]
-table2docs = "table2docs.cli:main"
+box2table = "box2table.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

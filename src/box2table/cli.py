@@ -433,7 +433,7 @@ class NoTable(Exception):
 def convert_text(source: str, to_stdout: bool) -> str:
     """Put the table on the clipboard, or write HTML when ``to_stdout`` is set.
 
-    The plain-text flavor stays ``source``, so a later ``table2docs`` still
+    The plain-text flavor stays ``source``, so a later ``box2table`` still
     sees the original box drawing. Returns the one-line status.
     """
     tables = parse_tables(source)
@@ -477,7 +477,7 @@ _TOOL_PATHS = {
     "claude": ".claude/commands/table.md",
     "grok": ".grok/commands/table.md",
     "codex": ".codex/skills/table/SKILL.md",
-    "pi": ".pi/agent/extensions/table2docs.ts",
+    "pi": ".pi/agent/extensions/box2table.ts",
     "opencode": ".config/opencode/commands/table.md",
     "gemini": ".gemini/commands/table.toml",
     "qwen": ".qwen/commands/table.md",
@@ -486,7 +486,7 @@ _TOOL_PATHS = {
     "droid": ".factory/commands/table",
 }
 _TOOLS = tuple(_TOOL_PATHS)
-MANAGED_MARKER = "table2docs-managed-command"
+MANAGED_MARKER = "box2table-managed-command"
 _OPEN_NOTE = (
     "已经开着的窗口要新开一次才认。Pi 可以在那个窗口里自己输入 /reload。"
     "Copilot 用 /skills reload。Droid 在 /commands 里按 R。"
@@ -497,9 +497,9 @@ _COMMAND_MD = """\
 description: 把剪贴板里刚复制的那一张表转成可粘贴的表格
 ---
 
-<!-- table2docs-managed-command -->
+<!-- box2table-managed-command -->
 
-剪贴板里是刚复制的那一张表。只运行 table2docs，不要加参数。把命令打印的那一行原样回复，不要重画表格。
+剪贴板里是刚复制的那一张表。只运行 box2table，不要加参数。把命令打印的那一行原样回复，不要重画表格。
 """
 
 _SKILL_MD = """\
@@ -510,9 +510,9 @@ disable-model-invocation: true
 user-invocable: true
 ---
 
-<!-- table2docs-managed-command -->
+<!-- box2table-managed-command -->
 
-剪贴板里是刚复制的那一张表。只运行 table2docs，不要加参数。把命令打印的那一行原样回复，不要重画表格。
+剪贴板里是刚复制的那一张表。只运行 box2table，不要加参数。把命令打印的那一行原样回复，不要重画表格。
 """
 
 _OPENCODE_MD = """\
@@ -520,22 +520,22 @@ _OPENCODE_MD = """\
 description: 把剪贴板里刚复制的那一张表转成可粘贴的表格
 ---
 
-<!-- table2docs-managed-command -->
+<!-- box2table-managed-command -->
 
 剪贴板里是刚复制的那一张表。下面命令的输出就是结果。把那一行原样回复，不要重画表格。
 
-!`table2docs`
+!`box2table`
 """
 
 _GEMINI_TOML = '''\
 description = "把剪贴板里刚复制的那一张表转成可粘贴的表格"
 
 prompt = """
-<!-- table2docs-managed-command -->
+<!-- box2table-managed-command -->
 
 剪贴板里是刚复制的那一张表。下面命令的输出就是结果。把那一行原样回复，不要重画表格。
 
-!{table2docs}
+!{box2table}
 """
 '''
 
@@ -544,11 +544,11 @@ _QWEN_MD = """\
 description: 把剪贴板里刚复制的那一张表转成可粘贴的表格
 ---
 
-<!-- table2docs-managed-command -->
+<!-- box2table-managed-command -->
 
 剪贴板里是刚复制的那一张表。下面命令的输出就是结果。把那一行原样回复，不要重画表格。
 
-!{table2docs}
+!{box2table}
 """
 
 _COPILOT_SKILL = """\
@@ -557,21 +557,21 @@ name: table
 description: 只在用户输入 /table 时使用。剪贴板里是刚复制的那一张表。
 ---
 
-<!-- table2docs-managed-command -->
+<!-- box2table-managed-command -->
 
-剪贴板里是刚复制的那一张表。只运行 table2docs，不要加参数。把命令打印的那一行原样回复，不要重画表格。
+剪贴板里是刚复制的那一张表。只运行 box2table，不要加参数。把命令打印的那一行原样回复，不要重画表格。
 """
 
 _DROID_SH = """\
 #!/bin/sh
-# table2docs-managed-command
+# box2table-managed-command
 # 剪贴板里是刚复制的那一张表。把下面命令打印的那一行原样回复，不要重画表格。
-exec table2docs
+exec box2table
 """
 
 _PI_EXTENSION = """\
-// table2docs-managed-command
-// 剪贴板里是刚复制的那一张表。只运行 table2docs。把命令打印的那一行原样回复，不要重画表格。
+// box2table-managed-command
+// 剪贴板里是刚复制的那一张表。只运行 box2table。把命令打印的那一行原样回复，不要重画表格。
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -590,7 +590,7 @@ function lastLine(text: string): string {
 }
 
 function run(bin: string): RunResult {
-  // 继承终端，table2docs 才会读剪贴板，而不是去读一条空管道。
+  // 继承终端，box2table 才会读剪贴板，而不是去读一条空管道。
   const result = spawnSync(bin, [], { encoding: "utf8", stdio: ["inherit", "pipe", "pipe"] });
   const error = result.error as { code?: string; message?: string } | undefined;
   return {
@@ -606,12 +606,12 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("table", {
     description: "把剪贴板里刚复制的那一张表转成可粘贴的表格",
     handler: async (_args, ctx) => {
-      let result = run("table2docs");
+      let result = run("box2table");
       if (result.missing) {
-        result = run(`${homedir()}/.local/bin/table2docs`);
+        result = run(`${homedir()}/.local/bin/box2table`);
       }
       if (result.missing) {
-        ctx.ui.notify("找不到 table2docs。", "error");
+        ctx.ui.notify("找不到 box2table。", "error");
         return;
       }
       if (result.errorMessage) {
@@ -669,7 +669,7 @@ def _unique(names: list[str]) -> list[str]:
 def _print_install_help() -> None:
     print(f"可安装：{_known_tools()}。")
     print("先复制要的那一张表，再输入 /table；只装了 claude 时，Grok 也能看到这条命令。")
-    print("要勾选安装，运行 table2docs bootstrap。")
+    print("要勾选安装，运行 box2table bootstrap。")
 
 
 def _reject_unknown(names: list[str]) -> bool:
@@ -923,7 +923,7 @@ def _print_bootstrap_plain(items) -> None:
     print("不是交互终端，没有打开勾选，也没有写入。")
     for name, status, _checked in items:
         print(f"{name}  {status}")
-    print("要安装，运行 table2docs install 名字。")
+    print("要安装，运行 box2table install 名字。")
     for line in _BOOTSTRAP_NOTES:
         print(line)
 
@@ -948,7 +948,7 @@ def _bootstrap(home: Path) -> int:
     try:
         chosen = _choose_on_tty(items)
     except (termios.error, OSError) as exc:
-        print(f"没能打开勾选：{exc}。改用 table2docs install 名字。", file=sys.stderr)
+        print(f"没能打开勾选：{exc}。改用 box2table install 名字。", file=sys.stderr)
         return 1
     return _apply_bootstrap_choice(home, chosen)
 
@@ -973,7 +973,7 @@ def _is_setup_argv(argv: list[str]) -> bool:
 
 def _setup_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        prog="table2docs",
+        prog="box2table",
         description="安装或卸掉 /table。",
     )
     parser.add_argument("--home", help="家目录。省略时用当前用户的家目录。")
@@ -992,7 +992,7 @@ def _setup_main(argv: list[str]) -> int:
         if names:
             print(
                 "bootstrap 不用写工具名字，运行后在列表里勾选。"
-                "也可以用 table2docs install 名字。",
+                "也可以用 box2table install 名字。",
                 file=sys.stderr,
             )
             return 1
@@ -1012,9 +1012,9 @@ def main(argv: list[str] | None = None) -> int:
     if _is_setup_argv(argv):
         return _setup_main(argv)
     parser = argparse.ArgumentParser(
-        prog="table2docs",
+        prog="box2table",
         description="把 Unicode 方框表或 Markdown 表放进剪贴板。Google Docs、Word、Pages、PowerPoint 会各自选一种格式贴成表格。",
-        epilog="勾选安装：table2docs bootstrap。按名字安装：table2docs install。",
+        epilog="勾选安装：box2table bootstrap。按名字安装：box2table install。",
     )
     parser.add_argument(
         "file",
