@@ -12,6 +12,9 @@
 
 **直接粘贴（⌘V）：**
 终端里的表因为窗口窄变成了这样：
+
+![终端里的方框表](docs/images/before.png)
+
 ```text
 │周末菜单可调整  │4             │比如家里人说不吃辣，或者另一顿的            │
 │                │              │leftover，算进了这桌。不改菜单              │
@@ -20,6 +23,13 @@
 直接贴进 Google Docs，断行还在，窗口一变断行位置全错，甚至保留了字符画边框。
 
 **用 table2docs 处理后（⌘V）：**
+
+![处理后的表格](docs/images/after.png)
+
+这是工具生成的表格。Google Docs 粘贴时读的就是这种 HTML。
+
+![从方框表到表格](docs/images/demo.gif)
+
 在 Google Docs 里自动渲染成原生 table，并且文本自动清理：
 
 > 「比如家里人说不吃辣，或者另一顿的 leftover，算进了这桌。不改菜单」
@@ -34,11 +44,15 @@
 ```bash
 git clone git@github.com:zhan9yx/table2docs.git
 cd table2docs
-chmod +x table2docs.py
-ln -sf "$(pwd)/table2docs.py" ~/.local/bin/table2docs
+pip install .
 ```
 
-*(确保 `~/.local/bin` 已加入你的 `PATH` 环境路径)*
+*(脚本会装进当前 Python 的可执行目录，这个目录要在 `PATH` 里。不想用 pip 时：)*
+
+```bash
+chmod +x src/table2docs/cli.py
+ln -sf "$(pwd)/src/table2docs/cli.py" ~/.local/bin/table2docs
+```
 
 ### 基本用法
 
@@ -58,9 +72,9 @@ table2docs
 | 命令 | 说明 |
 | --- | --- |
 | `table2docs` | 默认读剪贴板，清洗后写回可直接粘贴的表格格式 |
-| `table2docs 菜单.txt` | 从指定文件读取表格 |
+| `table2docs examples/menu.txt` | 从指定文件读取表格 |
 | `pbpaste \| table2docs` | 从管道读取 |
-| `table2docs --stdout 菜单.txt` | 仅输出 HTML 到终端，不修改剪贴板 |
+| `table2docs --stdout examples/menu.txt` | 仅输出 HTML 到终端，不修改剪贴板 |
 
 > 💡 **小技巧**：处理完后，剪贴板同时写入了 HTML/RTF 和原始文本。按 **⌘V** 贴出富文本表格；如果还想贴回原始框线表，按 **⌘⇧V** (粘贴纯文本) 即可。
 
@@ -105,6 +119,14 @@ table2docs uninstall claude
 
 ---
 
+## 项目结构
+
+```text
+src/table2docs/     命令
+examples/menu.txt   示例方框表
+docs/images/        截图
+```
+
 ## 📄 License
 
-MIT
+MIT。正文见 [LICENSE](LICENSE)。
